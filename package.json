@@ -22,6 +22,10 @@
     "ethers": "^6.16.0",
     "hardhat": "^3.4.1"
   },
+  "overrides": {
+    "@actions/core": "^3.0.1",
+    "@actions/http-client": "^4.0.1"
+  },
   "dependencies": {
     "dotenv": "^16.4.5"
   }
