@@ -103,6 +103,7 @@ contract ScheduledMarketWatcher {
     error NotOwner();
     error NotScheduler();
     error InvalidExecutor();
+    error InvalidOwner();
     error AssetNotConfigured();
     error InvalidScheduleConfig();
     error PrecompileCallFailed();
@@ -249,6 +250,7 @@ contract ScheduledMarketWatcher {
     }
 
     function transferOwnership(address newOwner) external onlyOwner {
+        if (newOwner == address(0)) revert InvalidOwner();
         owner = newOwner;
     }
 

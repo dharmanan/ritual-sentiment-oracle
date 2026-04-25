@@ -2,78 +2,151 @@
 /* tslint:disable */
 /* eslint-disable */
 
-
 import { ethers } from 'ethers'
-import { DeployContractOptions, FactoryOptions, HardhatEthersHelpers as HardhatEthersHelpersBase} from "@nomicfoundation/hardhat-ethers/types";
+import {
+  DeployContractOptions,
+  FactoryOptions,
+  HardhatEthersHelpers as HardhatEthersHelpersBase,
+} from '@nomicfoundation/hardhat-ethers/types'
 
-import * as Contracts from "./index.js";
+import * as Contracts from './index.js'
 
-declare module "@nomicfoundation/hardhat-ethers/types" {
+declare module '@nomicfoundation/hardhat-ethers/types' {
   interface HardhatEthersHelpers extends HardhatEthersHelpersBase {
-  getContractFactory(name: 'IRitualWallet', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.IRitualWallet__factory>
-getContractFactory(name: 'IScheduler', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.IScheduler__factory>
-getContractFactory(name: 'ScheduledMarketWatcher', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.ScheduledMarketWatcher__factory>
-getContractFactory(name: 'IRitualWallet', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.IRitualWallet__factory>
-getContractFactory(name: 'IScheduler', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.IScheduler__factory>
-getContractFactory(name: 'ScheduledMarketWatcher', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.ScheduledMarketWatcher__factory>
-getContractFactory(name: 'IExecutableWatcher', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.IExecutableWatcher__factory>
-getContractFactory(name: 'MockRitualPrecompile', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.MockRitualPrecompile__factory>
-getContractFactory(name: 'MockScheduler', signerOrOptions?: ethers.Signer | FactoryOptions): Promise<Contracts.MockScheduler__factory>
+    getContractFactory(
+      name: 'IRitualWallet',
+      signerOrOptions?: ethers.Signer | FactoryOptions,
+    ): Promise<Contracts.IRitualWallet__factory>
+    getContractFactory(
+      name: 'IScheduler',
+      signerOrOptions?: ethers.Signer | FactoryOptions,
+    ): Promise<Contracts.IScheduler__factory>
+    getContractFactory(
+      name: 'ScheduledMarketWatcher',
+      signerOrOptions?: ethers.Signer | FactoryOptions,
+    ): Promise<Contracts.ScheduledMarketWatcher__factory>
+    getContractFactory(
+      name: 'IExecutableWatcher',
+      signerOrOptions?: ethers.Signer | FactoryOptions,
+    ): Promise<Contracts.IExecutableWatcher__factory>
+    getContractFactory(
+      name: 'MockRitualPrecompile',
+      signerOrOptions?: ethers.Signer | FactoryOptions,
+    ): Promise<Contracts.MockRitualPrecompile__factory>
+    getContractFactory(
+      name: 'MockScheduler',
+      signerOrOptions?: ethers.Signer | FactoryOptions,
+    ): Promise<Contracts.MockScheduler__factory>
 
-  getContractAt(name: 'IRitualWallet', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.IRitualWallet>
-getContractAt(name: 'IScheduler', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.IScheduler>
-getContractAt(name: 'ScheduledMarketWatcher', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.ScheduledMarketWatcher>
-getContractAt(name: 'IRitualWallet', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.IRitualWallet>
-getContractAt(name: 'IScheduler', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.IScheduler>
-getContractAt(name: 'ScheduledMarketWatcher', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.ScheduledMarketWatcher>
-getContractAt(name: 'IExecutableWatcher', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.IExecutableWatcher>
-getContractAt(name: 'MockRitualPrecompile', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.MockRitualPrecompile>
-getContractAt(name: 'MockScheduler', address: string | ethers.Addressable, signer?: ethers.Signer): Promise<Contracts.MockScheduler>
+    getContractAt(
+      name: 'IRitualWallet',
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer,
+    ): Promise<Contracts.IRitualWallet>
+    getContractAt(
+      name: 'IScheduler',
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer,
+    ): Promise<Contracts.IScheduler>
+    getContractAt(
+      name: 'ScheduledMarketWatcher',
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer,
+    ): Promise<Contracts.ScheduledMarketWatcher>
+    getContractAt(
+      name: 'IExecutableWatcher',
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer,
+    ): Promise<Contracts.IExecutableWatcher>
+    getContractAt(
+      name: 'MockRitualPrecompile',
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer,
+    ): Promise<Contracts.MockRitualPrecompile>
+    getContractAt(
+      name: 'MockScheduler',
+      address: string | ethers.Addressable,
+      signer?: ethers.Signer,
+    ): Promise<Contracts.MockScheduler>
 
-  deployContract(name: 'IRitualWallet', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.IRitualWallet>
-deployContract(name: 'IScheduler', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.IScheduler>
-deployContract(name: 'ScheduledMarketWatcher', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.ScheduledMarketWatcher>
-deployContract(name: 'IRitualWallet', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.IRitualWallet>
-deployContract(name: 'IScheduler', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.IScheduler>
-deployContract(name: 'ScheduledMarketWatcher', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.ScheduledMarketWatcher>
-deployContract(name: 'IExecutableWatcher', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.IExecutableWatcher>
-deployContract(name: 'MockRitualPrecompile', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.MockRitualPrecompile>
-deployContract(name: 'MockScheduler', signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.MockScheduler>
+    deployContract(
+      name: 'IRitualWallet',
+      signerOrOptions?: ethers.Signer | DeployContractOptions,
+    ): Promise<Contracts.IRitualWallet>
+    deployContract(
+      name: 'IScheduler',
+      signerOrOptions?: ethers.Signer | DeployContractOptions,
+    ): Promise<Contracts.IScheduler>
+    deployContract(
+      name: 'ScheduledMarketWatcher',
+      signerOrOptions?: ethers.Signer | DeployContractOptions,
+    ): Promise<Contracts.ScheduledMarketWatcher>
+    deployContract(
+      name: 'IExecutableWatcher',
+      signerOrOptions?: ethers.Signer | DeployContractOptions,
+    ): Promise<Contracts.IExecutableWatcher>
+    deployContract(
+      name: 'MockRitualPrecompile',
+      signerOrOptions?: ethers.Signer | DeployContractOptions,
+    ): Promise<Contracts.MockRitualPrecompile>
+    deployContract(
+      name: 'MockScheduler',
+      signerOrOptions?: ethers.Signer | DeployContractOptions,
+    ): Promise<Contracts.MockScheduler>
 
-  deployContract(name: 'IRitualWallet', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.IRitualWallet>
-deployContract(name: 'IScheduler', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.IScheduler>
-deployContract(name: 'ScheduledMarketWatcher', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.ScheduledMarketWatcher>
-deployContract(name: 'IRitualWallet', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.IRitualWallet>
-deployContract(name: 'IScheduler', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.IScheduler>
-deployContract(name: 'ScheduledMarketWatcher', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.ScheduledMarketWatcher>
-deployContract(name: 'IExecutableWatcher', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.IExecutableWatcher>
-deployContract(name: 'MockRitualPrecompile', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.MockRitualPrecompile>
-deployContract(name: 'MockScheduler', args: any[], signerOrOptions?: ethers.Signer | DeployContractOptions): Promise<Contracts.MockScheduler>
+    deployContract(
+      name: 'IRitualWallet',
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions,
+    ): Promise<Contracts.IRitualWallet>
+    deployContract(
+      name: 'IScheduler',
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions,
+    ): Promise<Contracts.IScheduler>
+    deployContract(
+      name: 'ScheduledMarketWatcher',
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions,
+    ): Promise<Contracts.ScheduledMarketWatcher>
+    deployContract(
+      name: 'IExecutableWatcher',
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions,
+    ): Promise<Contracts.IExecutableWatcher>
+    deployContract(
+      name: 'MockRitualPrecompile',
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions,
+    ): Promise<Contracts.MockRitualPrecompile>
+    deployContract(
+      name: 'MockScheduler',
+      args: any[],
+      signerOrOptions?: ethers.Signer | DeployContractOptions,
+    ): Promise<Contracts.MockScheduler>
 
-    // default types
     getContractFactory(
       name: string,
-      signerOrOptions?: ethers.Signer | FactoryOptions
-    ): Promise<ethers.ContractFactory>;
+      signerOrOptions?: ethers.Signer | FactoryOptions,
+    ): Promise<ethers.ContractFactory>
     getContractFactory(
       abi: any[],
       bytecode: ethers.BytesLike,
-      signer?: ethers.Signer
-    ): Promise<ethers.ContractFactory>;
+      signer?: ethers.Signer,
+    ): Promise<ethers.ContractFactory>
     getContractAt(
       nameOrAbi: string | any[],
       address: string | ethers.Addressable,
-      signer?: ethers.Signer
-    ): Promise<ethers.Contract>;
+      signer?: ethers.Signer,
+    ): Promise<ethers.Contract>
     deployContract(
       name: string,
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<ethers.Contract>;
+      signerOrOptions?: ethers.Signer | DeployContractOptions,
+    ): Promise<ethers.Contract>
     deployContract(
       name: string,
       args: any[],
-      signerOrOptions?: ethers.Signer | DeployContractOptions
-    ): Promise<ethers.Contract>;
+      signerOrOptions?: ethers.Signer | DeployContractOptions,
+    ): Promise<ethers.Contract>
   }
 }
-  

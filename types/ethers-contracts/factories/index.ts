@@ -2,5 +2,4 @@
 /* tslint:disable */
 /* eslint-disable */
 export * as scheduledMarketWatcherSol from './ScheduledMarketWatcher.sol/index.js';
-export * as sentimentOracleSol from './SentimentOracle.sol/index.js';
 export * as test from './test/index.js';

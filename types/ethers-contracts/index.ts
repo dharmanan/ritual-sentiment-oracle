@@ -3,8 +3,6 @@
 /* eslint-disable */
 import type * as scheduledMarketWatcherSol from './ScheduledMarketWatcher.sol/index.js';
 export type { scheduledMarketWatcherSol };
-import type * as sentimentOracleSol from './SentimentOracle.sol/index.js';
-export type { sentimentOracleSol };
 import type * as test from './test/index.js';
 export type { test };
 export * as factories from './factories/index.js';

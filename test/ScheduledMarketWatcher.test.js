@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { AbiCoder, keccak256, toUtf8Bytes } from "ethers";
+import { AbiCoder, ZeroAddress, keccak256, toUtf8Bytes } from "ethers";
 import { network } from "hardhat";
 
 const coder = AbiCoder.defaultAbiCoder();
@@ -114,6 +114,37 @@ describe("ScheduledMarketWatcher", function () {
     await assertRevertsWith(() => watcher.executeAnalysis(0, ethAssetId), "NotScheduler");
   });
 
+  it("rejects zero-address executors during asset configuration", async function () {
+    const { watcher } = await deployFixture();
+
+    await assertRevertsWith(
+      () => watcher.configureAsset("ETH", "ethereum", ZeroAddress, LLM_EXECUTOR),
+      "InvalidExecutor"
+    );
+    await assertRevertsWith(
+      () => watcher.configureAsset("ETH", "ethereum", HTTP_EXECUTOR, ZeroAddress),
+      "InvalidExecutor"
+    );
+  });
+
+  it("rejects invalid schedule configurations", async function () {
+    const { watcher } = await deployFixture();
+    const ethAssetId = await configureEthWatcher(watcher);
+
+    await assertRevertsWith(
+      () => watcher.scheduleAssetWatcher(ethAssetId, 0, 120, 24, 2_200_000, 240, 10n, 1n),
+      "InvalidScheduleConfig"
+    );
+    await assertRevertsWith(
+      () => watcher.scheduleAssetWatcher(ethAssetId, 360, 360, 24, 2_200_000, 240, 10n, 1n),
+      "InvalidScheduleConfig"
+    );
+    await assertRevertsWith(
+      () => watcher.scheduleAssetWatcher(ethAssetId, 360, 120, 0, 2_200_000, 240, 10n, 1n),
+      "InvalidScheduleConfig"
+    );
+  });
+
   it("schedules both recurring phases and only cancels active prior schedules on reschedule", async function () {
     const { watcher, scheduler } = await deployFixture();
     const ethAssetId = await configureEthWatcher(watcher);
@@ -148,6 +179,46 @@ describe("ScheduledMarketWatcher", function () {
     assert.equal(await scheduler.cancelledCalls(0), firstConfig.analysisScheduleId);
   });
 
+  it("records failed HTTP fetch responses without making a snapshot available", async function () {
+    const { watcher, scheduler, http } = await deployFixture();
+    const ethAssetId = await configureEthWatcher(watcher);
+
+    await http.setResponse(shortRunningEnvelope(httpSettlement(500, "", "upstream unavailable")));
+    await scheduler.executeFetch(await watcher.getAddress(), 9, ethAssetId);
+
+    const snapshot = await watcher.getMarketSnapshot(ethAssetId);
+    assert.equal(snapshot.symbol, "ETH");
+    assert.equal(snapshot.summary, "");
+    assert.equal(snapshot.statusCode, 500n);
+    assert.equal(snapshot.fetchExecutionIndex, 9n);
+    assert.equal(snapshot.available, false);
+    assert.equal(snapshot.errorMessage, "upstream unavailable");
+  });
+
+  it("marks snapshots unavailable when JQ extraction is empty", async function () {
+    const { watcher, scheduler, http, jq } = await deployFixture();
+    const ethAssetId = await configureEthWatcher(watcher);
+
+    const rawBody = JSON.stringify({
+      market_data: {
+        current_price: { usd: 3500.12 },
+        price_change_percentage_24h: 4.8,
+        total_volume: { usd: 18000000000 },
+        market_cap: { usd: 420000000000 },
+      },
+    });
+
+    await http.setResponse(shortRunningEnvelope(httpSettlement(200, rawBody)));
+    await jq.setResponse("0x");
+    await scheduler.executeFetch(await watcher.getAddress(), 11, ethAssetId);
+
+    const snapshot = await watcher.getMarketSnapshot(ethAssetId);
+    assert.equal(snapshot.summary, "");
+    assert.equal(snapshot.fetchExecutionIndex, 11n);
+    assert.equal(snapshot.available, false);
+    assert.equal(snapshot.errorMessage, "JQ extraction returned empty summary");
+  });
+
   it("stores a normalized market snapshot after a mocked scheduler fetch", async function () {
     const { watcher, scheduler, http, jq } = await deployFixture();
     const ethAssetId = await configureEthWatcher(watcher);
@@ -176,6 +247,42 @@ describe("ScheduledMarketWatcher", function () {
     assert.equal(snapshot.fetchExecutionIndex, 42n);
     assert.equal(snapshot.available, true);
     assert.equal(snapshot.errorMessage, "");
+  });
+
+  it("stores analysis errors returned by the mocked LLM settlement", async function () {
+    const { watcher, scheduler, http, jq, llm } = await deployFixture();
+    const ethAssetId = await configureEthWatcher(watcher);
+
+    const rawBody = JSON.stringify({
+      market_data: {
+        current_price: { usd: 3500.12 },
+        price_change_percentage_24h: 4.8,
+        total_volume: { usd: 18000000000 },
+        market_cap: { usd: 420000000000 },
+      },
+    });
+    const summary = "price_usd=3500.12 price_change_24h=4.8 volume_usd=18000000000 market_cap_usd=420000000000";
+    const llmSettlement = coder.encode(
+      ["bool", "bytes", "bytes", "string", "tuple(string platform,string path,string keyRef)"],
+      [true, "0x", "0x", "model timeout", ["", "", ""]]
+    );
+
+    await http.setResponse(shortRunningEnvelope(httpSettlement(200, rawBody)));
+    await jq.setResponse(jqStringResult(summary));
+    await scheduler.executeFetch(await watcher.getAddress(), 5, ethAssetId);
+
+    await llm.setResponse(shortRunningEnvelope(llmSettlement));
+    await scheduler.executeAnalysis(await watcher.getAddress(), 8, ethAssetId);
+
+    const sentiment = await watcher.getSentimentResult(ethAssetId);
+    assert.equal(sentiment.score, 0n);
+    assert.equal(sentiment.signal, "ERROR");
+    assert.equal(sentiment.reasoning, "");
+    assert.equal(sentiment.rawResponse, "");
+    assert.equal(sentiment.errorMessage, "model timeout");
+    assert.equal(sentiment.fulfilled, true);
+    assert.equal(sentiment.hasError, true);
+    assert.equal(sentiment.analysisExecutionIndex, 8n);
   });
 
   it("stores parsed sentiment after a mocked scheduler analysis", async function () {
@@ -225,5 +332,25 @@ describe("ScheduledMarketWatcher", function () {
     const ethAssetId = await configureEthWatcher(watcher);
 
     await assertRevertsWith(() => watcher.analyzeNow(ethAssetId), "SnapshotUnavailable");
+  });
+
+  it("transfers ownership safely and rejects zero-address handoff", async function () {
+    const { watcher, other } = await deployFixture();
+
+    await assertRevertsWith(() => watcher.transferOwnership(ZeroAddress), "InvalidOwner");
+
+    await watcher.transferOwnership(other.address);
+    assert.equal(await watcher.owner(), other.address);
+
+    await assertRevertsWith(
+      () => watcher.configureAsset("ETH", "ethereum", HTTP_EXECUTOR, LLM_EXECUTOR),
+      "NotOwner"
+    );
+
+    await watcher.connect(other).configureAsset("ETH", "ethereum", HTTP_EXECUTOR, LLM_EXECUTOR);
+    const config = await watcher.getAssetConfig(assetId("ETH"));
+    assert.equal(config.configured, true);
+    assert.equal(config.httpExecutor, HTTP_EXECUTOR);
+    assert.equal(config.llmExecutor, LLM_EXECUTOR);
   });
 });
