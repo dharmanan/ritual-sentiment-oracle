@@ -549,6 +549,8 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Ritual market watcher deploy/debug helper")
     subparsers = parser.add_subparsers(dest="command")
 
+    subparsers.add_parser("inspect", help="Inspect executors, balances, and current contract owner")
+
     configure = subparsers.add_parser("configure", help="Configure one tracked asset")
     configure.add_argument("--symbol", default=DEFAULT_SYMBOL)
     configure.add_argument("--coin-id", default=DEFAULT_COIN_ID)
