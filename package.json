@@ -8,8 +8,8 @@
     "test":     "hardhat test"
   },
   "devDependencies": {
-    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
-    "hardhat": "^2.22.0"
+    "@nomicfoundation/hardhat-toolbox": "^7.0.0",
+    "hardhat": "^3.4.1"
   },
   "dependencies": {
     "dotenv": "^16.4.5"
