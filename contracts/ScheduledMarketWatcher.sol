@@ -20,6 +20,8 @@ interface IScheduler {
     ) external returns (uint256 callId);
 
     function cancel(uint256 callId) external;
+
+    function getCallState(uint256 callId) external view returns (uint8 state);
 }
 
 contract ScheduledMarketWatcher {
@@ -422,13 +424,23 @@ contract ScheduledMarketWatcher {
 
     function _cancelSchedules(AssetConfig storage config) internal {
         if (config.fetchScheduleId != 0) {
-            scheduler.cancel(config.fetchScheduleId);
+            _cancelIfActive(config.fetchScheduleId);
             config.fetchScheduleId = 0;
         }
 
         if (config.analysisScheduleId != 0) {
-            scheduler.cancel(config.analysisScheduleId);
+            _cancelIfActive(config.analysisScheduleId);
             config.analysisScheduleId = 0;
+        }
+    }
+
+    function _cancelIfActive(uint256 scheduleId) internal {
+        try scheduler.getCallState(scheduleId) returns (uint8 state) {
+            if (state < 2) {
+                scheduler.cancel(scheduleId);
+            }
+        } catch {
+            // Ignore already-pruned or inaccessible schedules during rescheduling cleanup.
         }
     }
 

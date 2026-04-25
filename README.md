@@ -1,133 +1,188 @@
-# ritual-onchain-oracle
+# ritual-sentiment-oracle
 
-> **On-chain sentiment analysis powered entirely by Ritual's LLM Precompile (0x0802).**  
-> No external APIs. No Chainlink. No off-chain relayers. The model runs inside a TEE — attested, verified, written to chain.
+Autonomous on-chain market watcher for Ritual.
 
----
+This repository demonstrates a Ritual-native market intelligence workflow built around the chain's core execution primitives. It fetches market data through Ritual HTTP, normalizes the payload through Ritual JQ, runs sentiment analysis through Ritual LLM, and stores structured outputs on-chain on a recurring schedule.
 
-## What This Is
+## What This Repository Demonstrates
 
-`ritual-onchain-oracle` is an autonomous agent + smart contract pair that demonstrates Ritual Chain's core value proposition: **AI inference as a native EVM operation**.
+- A two-phase Ritual workflow split across scheduled fetch and scheduled analysis
+- On-chain market snapshots generated from HTTP + JQ precompiles
+- Structured `SCORE / SIGNAL / REASON` outputs generated through the LLM precompile
+- A clean operator surface for funding, configuration, scheduling, and inspection
+- Local mocked validation that proves the core contract flow before faucet-funded live execution
 
-A Python agent collects market context (price data + headlines), then calls `analyzeSentiment()` on-chain. The contract forwards the prompt to the **LLM Precompile at `0x0802`** — which runs `GLM-4.7-FP8` inside a Trusted Execution Environment. The result is attested, delivered via async callback, and written directly to contract state. No middleware. No trust assumptions.
+## Review Snapshot
 
-```
-Python Agent
-    │
-    ▼  analyzeSentiment(asset, context)
-SentimentOracle.sol
-    │
-    ▼  ILLMPrecompile(0x0802).requestCompletion(prompt)
-GLM-4.7-FP8 (TEE)
-    │
-    ▼  onSentimentResult(requestId, result)  ← async callback
-SentimentOracle.sol  →  score + signal stored on-chain
-```
+- Contract surface: scheduled HTTP fetch, deterministic JQ extraction, scheduled LLM analysis
+- Local proof: compile passes, mocked unit tests pass, helper syntax check passes, CI is configured
+- Live proof pending: Ritual testnet deployment and recurring execution require faucet-funded RITUAL
 
----
+## Core Workflow
+
+- HTTP precompile `0x0801` fetches external market data
+- JQ precompile `0x0803` extracts deterministic summary fields on-chain
+- LLM precompile `0x0802` produces structured sentiment output
+- Scheduler automates recurring fetch and analysis jobs
+- Python is used as an operator helper CLI for funding, configuration, scheduling, and inspection
 
 ## Architecture
 
-| Component | Description |
+Ritual does not allow two short-running async precompile calls in the same transaction, so the watcher is split into two scheduled phases.
+
+```text
+Phase 1: Scheduled fetch
+    Scheduler -> executeFetch(assetId)
+                        -> HTTP precompile 0x0801
+                        -> JQ precompile 0x0803
+                        -> store normalized market snapshot on-chain
+
+Phase 2: Scheduled analysis
+    Scheduler -> executeAnalysis(assetId)
+                        -> LLM precompile 0x0802
+                        -> store SCORE / SIGNAL / REASON on-chain
+```
+
+This follows Ritual's documented model:
+
+- one short-running async precompile per transaction
+- EIP-1559 transactions only
+- executor selection through `TEEServiceRegistry`
+- recurring automation through the Scheduler contract
+- fee escrow through `RitualWallet`
+
+## Project Layout
+
+| Path | Purpose |
 |---|---|
-| `contracts/SentimentOracle.sol` | EVM++ contract. Sends prompts to 0x0802, parses structured LLM output, emits `SentimentFulfilled` events |
-| `agent/oracle_agent.py` | Python agent. Fetches context, submits tx, polls result |
-| `scripts/deploy.js` | Hardhat deploy script for Ritual testnet |
+| `contracts/ScheduledMarketWatcher.sol` | `ScheduledMarketWatcher` contract with scheduled HTTP/JQ and LLM phases |
+| `agent/oracle_agent.py` | Helper CLI for funding, configuration, scheduling, and inspection |
+| `scripts/deploy.js` | Deployment script for Ritual testnet |
 
-### Why Ritual's LLM Precompile?
+## Validation
 
-Traditional oracle setups require: off-chain computation → signature verification → on-chain settlement. This involves trust in the off-chain operator, latency from multiple hops, and extra infrastructure.
+```bash
+npm run validate
+```
 
-With Ritual's 0x0802 precompile, the LLM is a **first-class EVM citizen**:
-- Inference runs inside a TEE with hardware attestation
-- Result delivered to the contract in the same async flow as any other precompile
-- Zero external API keys, zero off-chain trust surface
+Current validation scope:
 
----
+- `hardhat compile`
+- `hardhat test test/ScheduledMarketWatcher.test.js`
+- Python helper syntax check
+
+These tests run locally with mocked Ritual system contracts at the fixed precompile and scheduler addresses, so the core watcher logic can be validated without faucet-funded tokens.
+
+GitHub Actions can run the same validation command on every push and pull request.
+
+## Live Ritual Testnet Status
+
+This repository does not currently have faucet-funded testnet RITUAL, so it does not claim a live end-to-end Ritual testnet proof yet.
+
+That limitation is explicit by design: the repo is meant to be technically reviewable now, while staying honest about what still requires live network funding.
+
+Once faucet access is available, this repository will add:
+
+- live deploy verification on Ritual testnet
+- funded `RitualWallet` execution checks
+- recurring scheduler smoke tests with captured on-chain results
 
 ## Quickstart
 
-### 1. Clone & Install
+### 1. Install
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/ritual-onchain-oracle
-cd ritual-onchain-oracle
 npm install
-pip install web3 requests python-dotenv
+pip install web3 python-dotenv
 ```
 
 ### 2. Configure
 
 ```bash
 cp .env.example .env
-# Fill in PRIVATE_KEY and RITUAL_RPC_URL
 ```
 
-### 3. Deploy Contract
+Fill in:
+
+- `PRIVATE_KEY`
+- `RITUAL_RPC_URL`
+
+After deploy, also fill in:
+
+- `CONTRACT_ADDRESS`
+
+### 3. Deploy
 
 ```bash
 npm run deploy
-# Copy the deployed address into .env as CONTRACT_ADDRESS
 ```
 
-### 4. Run Agent
+Before asking for faucet access or sharing the repo, run the local validation suite:
 
 ```bash
-python agent/oracle_agent.py
+npm run validate
 ```
 
----
+### 4. Inspect available executors and balances
 
-## On-Chain Output Format
-
-The contract enforces a structured output from the LLM:
-
-```
-SCORE:<-1|0|1> SIGNAL:<BUY|SELL|HOLD> REASON:<max 20 words>
+```bash
+npm run helper:inspect
 ```
 
-This is parsed on-chain by `_parse()` — no off-chain post-processing.
+### 5. Configure a tracked asset
 
----
+```bash
+npm run helper:configure -- --symbol ETH --coin-id ethereum
+```
 
-## Roadmap
+### 6. Fund the contract's RitualWallet
 
-- [x] LLM Precompile integration (0x0802)
-- [x] Structured on-chain output parsing
-- [x] Python agent with real market context
-- [ ] Deploy on Ritual Testnet (pending testnet RITUAL for gas)
-- [ ] HTTP Precompile (0x0801) for fully on-chain data fetch
-- [ ] Scheduler precompile for autonomous periodic execution
-- [ ] Multi-asset aggregation + on-chain signal history
+```bash
+python agent/oracle_agent.py fund --amount 0.05 --lock-blocks 50000
+```
 
----
+### 7. Schedule recurring jobs
 
-## Stack
+```bash
+npm run helper:schedule -- --symbol ETH
+```
 
-- **Ritual Chain** — AI-native L1 (EVM++), Chain ID `1979`
-- **LLM Precompile 0x0802** — TEE-hosted GLM-4.7-FP8, 64K context
-- **AsyncDelivery** — `0x5A16214fF555848411544b005f7Ac063742f39F6`
-- **Solidity 0.8.20** — EVM++ compatible contract
-- **Python + Web3.py** — off-chain agent
-- **Hardhat** — compile & deploy tooling
+Safe starter values in this repo are intentionally conservative:
 
-### Chain Reference
+- `SCHEDULE_CADENCE=360`
+- `ANALYSIS_DELAY=120`
+- `SCHEDULER_TTL=240`
 
-| Property | Value |
-|---|---|
-| Chain ID | `1979` |
-| RPC | `https://rpc.ritualfoundation.org` |
-| Explorer | `https://explorer.ritualfoundation.org` |
-| Currency | RITUAL (18 decimals) |
+These defaults are chosen to leave room for short-running async settlement on Ritual rather than optimize for speed.
 
----
+### 8. Inspect stored snapshot and analysis
 
-## Status
+```bash
+python agent/oracle_agent.py show --symbol ETH
+```
 
-**Testnet-ready.** Contract compiles and is staged for deployment.  
-Pending testnet RITUAL tokens for gas to complete on-chain testing.
+## Ritual-Native Design
 
----
+- Market data fetches are executed through Ritual's HTTP precompile.
+- Deterministic normalization is handled on-chain through the JQ precompile.
+- Recurring execution cadence is owned by the Scheduler contract.
+- Structured sentiment output is stored on-chain after LLM analysis.
+- Python remains outside the core business logic and serves only as operator tooling.
+
+## Current Limits
+
+- Runtime behavior is validated with local mocked precompile and scheduler tests, not with live funded testnet execution yet.
+- A live deploy is still required to prove the schedule timing on real Ritual testnet conditions.
+- The current market snapshot is sourced from CoinGecko only; multi-source context would be stronger.
+
+## Current Status
+
+- [x] Scheduled HTTP + JQ phase added
+- [x] Scheduled LLM phase added
+- [x] Python reduced to helper CLI
+- [x] Local mocked unit tests cover scheduler, fetch, and analysis flows
+- [x] Compile, local unit tests, and helper syntax validation pass
+- [ ] Live deploy and recurring execution proof need testnet RITUAL from the faucet
 
 ## License
 

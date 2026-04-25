@@ -3,6 +3,7 @@ artifacts/
 cache/
 .env
 .claude/skills/ritual-dapp-skills/
+docs/faucet-request.md
 __pycache__/
 *.pyc
 .DS_Store

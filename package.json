@@ -1,15 +1,26 @@
 {
-  "name": "ritual-onchain-oracle",
+  "name": "ritual-sentiment-oracle",
   "version": "0.1.0",
-  "description": "On-chain sentiment oracle powered by Ritual LLM Precompile (0x0802)",
+  "description": "Autonomous on-chain market watcher for Ritual using HTTP, JQ, LLM, and Scheduler precompiles",
+  "type": "module",
   "scripts": {
     "compile":  "hardhat compile",
     "deploy":   "hardhat run scripts/deploy.js --network ritual-testnet",
-    "test":     "hardhat test"
+    "test":     "hardhat test",
+    "test:unit": "hardhat test test/ScheduledMarketWatcher.test.js",
+    "helper": "python agent/oracle_agent.py",
+    "helper:inspect": "python agent/oracle_agent.py inspect",
+    "helper:configure": "python agent/oracle_agent.py configure",
+    "helper:schedule": "python agent/oracle_agent.py schedule",
+    "check:helper": "python -m py_compile agent/oracle_agent.py",
+    "validate": "npm run compile && npm run test:unit -- --no-compile && npm run check:helper"
   },
   "devDependencies": {
-    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
-    "hardhat": "^2.22.0"
+    "@nomicfoundation/hardhat-ethers": "^4.0.9",
+    "@nomicfoundation/hardhat-network-helpers": "^3.0.6",
+    "@nomicfoundation/hardhat-node-test-runner": "^3.0.14",
+    "ethers": "^6.16.0",
+    "hardhat": "^3.4.1"
   },
   "dependencies": {
     "dotenv": "^16.4.5"
