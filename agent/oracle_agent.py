@@ -26,6 +26,8 @@ DEFAULT_ANALYSIS_DELAY = int(os.getenv("ANALYSIS_DELAY", "120"))
 DEFAULT_NUM_CALLS = int(os.getenv("NUM_CALLS", "24"))
 DEFAULT_GAS_LIMIT = int(os.getenv("SCHEDULE_GAS_LIMIT", "2200000"))
 DEFAULT_SCHEDULER_TTL = int(os.getenv("SCHEDULER_TTL", "240"))
+MIN_ANALYSIS_DELAY = 100
+MIN_SCHEDULER_TTL = 180
 
 HTTP_EXECUTOR = os.getenv("HTTP_EXECUTOR", "").strip()
 LLM_EXECUTOR = os.getenv("LLM_EXECUTOR", "").strip()
@@ -443,10 +445,10 @@ def schedule_command(args) -> None:
 
     if args.analysis_delay >= args.cadence:
         raise RuntimeError("analysis-delay must be lower than cadence.")
-    if args.analysis_delay < 100:
-        print("Warning: analysis-delay below 100 blocks can race HTTP settlement on Ritual testnet.")
-    if args.scheduler_ttl < 180:
-        print("Warning: scheduler-ttl below 180 blocks can be too low for async settlement, especially for LLM analysis.")
+    if args.analysis_delay < MIN_ANALYSIS_DELAY:
+      raise RuntimeError(f"analysis-delay must be at least {MIN_ANALYSIS_DELAY} blocks.")
+    if args.scheduler_ttl < MIN_SCHEDULER_TTL:
+      raise RuntimeError(f"scheduler-ttl must be at least {MIN_SCHEDULER_TTL} blocks.")
 
     tx_hash, _ = send_transaction(
         watcher.functions.scheduleAssetWatcher(

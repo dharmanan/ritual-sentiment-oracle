@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity 0.8.30;
 
 interface IRitualWallet {
     function deposit(uint256 lockDuration) external payable;
@@ -36,6 +36,8 @@ contract ScheduledMarketWatcher {
     uint256 public constant LLM_TTL = 300;
     int256 public constant DEFAULT_MAX_COMPLETION_TOKENS = 4096;
     int256 public constant DEFAULT_TEMPERATURE = 200;
+    uint32 public constant MIN_ANALYSIS_DELAY = 100;
+    uint32 public constant MIN_SCHEDULER_TTL = 180;
 
     string private constant COINGECKO_URL_PREFIX = "https://api.coingecko.com/api/v3/coins/";
     string private constant COINGECKO_URL_SUFFIX = "?localization=false&tickers=false&community_data=false&developer_data=false&sparkline=false";
@@ -99,16 +101,20 @@ contract ScheduledMarketWatcher {
     event WatcherCancelled(bytes32 indexed assetId, uint256 fetchScheduleId, uint256 analysisScheduleId);
     event MarketSnapshotUpdated(bytes32 indexed assetId, string symbol, uint256 executionIndex, uint16 statusCode, bool available);
     event SentimentAnalyzed(bytes32 indexed assetId, string symbol, uint256 executionIndex, bool hasError, int8 score, string signal, string model);
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
     error NotOwner();
     error NotScheduler();
     error InvalidExecutor();
     error InvalidOwner();
+    error ReentrantCall();
     error AssetNotConfigured();
     error InvalidScheduleConfig();
     error PrecompileCallFailed();
     error SnapshotUnavailable();
     error EmptyCompletion();
+
+    uint256 private unlocked = 1;
 
     constructor() {
         owner = msg.sender;
@@ -125,7 +131,14 @@ contract ScheduledMarketWatcher {
         _;
     }
 
-    function depositScheduleFees(uint256 lockBlocks) external payable onlyOwner {
+    modifier nonReentrant() {
+        if (unlocked != 1) revert ReentrantCall();
+        unlocked = 2;
+        _;
+        unlocked = 1;
+    }
+
+    function depositScheduleFees(uint256 lockBlocks) external payable onlyOwner nonReentrant {
         IRitualWallet(RITUAL_WALLET).deposit{value: msg.value}(lockBlocks);
         emit ScheduleFeesDeposited(msg.value, lockBlocks);
     }
@@ -163,9 +176,15 @@ contract ScheduledMarketWatcher {
         uint32 schedulerTtl,
         uint256 maxFeePerGas,
         uint256 maxPriorityFeePerGas
-    ) external onlyOwner {
+    ) external onlyOwner nonReentrant {
         AssetConfig storage config = _requireAssetConfig(assetId);
-        if (cadence == 0 || analysisDelay == 0 || analysisDelay >= cadence || numCalls == 0) {
+        if (
+            cadence == 0 ||
+            analysisDelay < MIN_ANALYSIS_DELAY ||
+            analysisDelay >= cadence ||
+            numCalls == 0 ||
+            schedulerTtl < MIN_SCHEDULER_TTL
+        ) {
             revert InvalidScheduleConfig();
         }
 
@@ -204,7 +223,7 @@ contract ScheduledMarketWatcher {
         emit WatcherScheduled(assetId, config.fetchScheduleId, config.analysisScheduleId, cadence, analysisDelay);
     }
 
-    function cancelAssetWatcher(bytes32 assetId) external onlyOwner {
+    function cancelAssetWatcher(bytes32 assetId) external onlyOwner nonReentrant {
         AssetConfig storage config = _requireAssetConfig(assetId);
         uint256 fetchScheduleId = config.fetchScheduleId;
         uint256 analysisScheduleId = config.analysisScheduleId;
@@ -213,19 +232,19 @@ contract ScheduledMarketWatcher {
         emit WatcherCancelled(assetId, fetchScheduleId, analysisScheduleId);
     }
 
-    function executeFetch(uint256 executionIndex, bytes32 assetId) external onlyScheduler {
+    function executeFetch(uint256 executionIndex, bytes32 assetId) external onlyScheduler nonReentrant {
         _fetchMarketData(assetId, executionIndex);
     }
 
-    function executeAnalysis(uint256 executionIndex, bytes32 assetId) external onlyScheduler {
+    function executeAnalysis(uint256 executionIndex, bytes32 assetId) external onlyScheduler nonReentrant {
         _analyzeMarketData(assetId, executionIndex);
     }
 
-    function fetchNow(bytes32 assetId) external onlyOwner {
+    function fetchNow(bytes32 assetId) external onlyOwner nonReentrant {
         _fetchMarketData(assetId, 0);
     }
 
-    function analyzeNow(bytes32 assetId) external onlyOwner {
+    function analyzeNow(bytes32 assetId) external onlyOwner nonReentrant {
         _analyzeMarketData(assetId, 0);
     }
 
@@ -251,7 +270,9 @@ contract ScheduledMarketWatcher {
 
     function transferOwnership(address newOwner) external onlyOwner {
         if (newOwner == address(0)) revert InvalidOwner();
+        address previousOwner = owner;
         owner = newOwner;
+        emit OwnershipTransferred(previousOwner, newOwner);
     }
 
     function _fetchMarketData(bytes32 assetId, uint256 executionIndex) internal {
@@ -499,84 +520,72 @@ contract ScheduledMarketWatcher {
             return "";
         }
 
-        uint256 strLen;
-        assembly {
-            strLen := mload(add(raw, 96))
-        }
-
-        bytes memory result = new bytes(strLen);
-        for (uint256 i = 0; i < strLen; i++) {
-            result[i] = raw[96 + i];
-        }
-
+        (, bytes memory result) = abi.decode(raw, (uint256, bytes));
         return string(result);
     }
 
     function _parse(string memory raw) internal pure returns (int8 score, string memory signal, string memory reason) {
         bytes memory data = bytes(raw);
-        uint256 reasonStart = type(uint256).max;
+        uint256 reasonStart = _findMarker(data, "REASON:");
 
-        score = 0;
-        signal = "HOLD";
+        score = _parseScore(data);
+        signal = _parseSignal(data);
         reason = raw;
-
-        for (uint256 i = 0; i + 5 < data.length; i++) {
-            if (
-                data[i] == "S" &&
-                data[i + 1] == "C" &&
-                data[i + 2] == "O" &&
-                data[i + 3] == "R" &&
-                data[i + 4] == "E" &&
-                data[i + 5] == ":"
-            ) {
-                uint256 cursor = _skipWhitespace(data, i + 6);
-                if (cursor + 1 < data.length && data[cursor] == "-" && data[cursor + 1] == "1") {
-                    score = -1;
-                } else if (cursor < data.length && data[cursor] == "1") {
-                    score = 1;
-                }
-                break;
-            }
-        }
-
-        for (uint256 i = 0; i + 6 < data.length; i++) {
-            if (
-                data[i] == "S" &&
-                data[i + 1] == "I" &&
-                data[i + 2] == "G" &&
-                data[i + 3] == "N" &&
-                data[i + 4] == "A" &&
-                data[i + 5] == "L" &&
-                data[i + 6] == ":"
-            ) {
-                uint256 cursor = _skipWhitespace(data, i + 7);
-                if (_matchesAt(data, cursor, "BUY")) {
-                    signal = "BUY";
-                } else if (_matchesAt(data, cursor, "SELL")) {
-                    signal = "SELL";
-                }
-                break;
-            }
-        }
-
-        for (uint256 i = 0; i + 6 < data.length; i++) {
-            if (
-                data[i] == "R" &&
-                data[i + 1] == "E" &&
-                data[i + 2] == "A" &&
-                data[i + 3] == "S" &&
-                data[i + 4] == "O" &&
-                data[i + 5] == "N" &&
-                data[i + 6] == ":"
-            ) {
-                reasonStart = i + 7;
-                break;
-            }
-        }
 
         if (reasonStart != type(uint256).max) {
             reason = _trim(data, reasonStart, data.length);
         }
+    }
+
+    function _parseScore(bytes memory data) internal pure returns (int8 score) {
+        uint256 marker = _findMarker(data, "SCORE:");
+        if (marker == type(uint256).max) {
+            return 0;
+        }
+
+        uint256 cursor = _skipWhitespace(data, marker);
+        if (cursor + 1 < data.length && data[cursor] == "-" && data[cursor + 1] == "1") {
+            return -1;
+        }
+
+        if (cursor < data.length && data[cursor] == "1") {
+            return 1;
+        }
+
+        return 0;
+    }
+
+    function _parseSignal(bytes memory data) internal pure returns (string memory signal) {
+        uint256 marker = _findMarker(data, "SIGNAL:");
+        if (marker == type(uint256).max) {
+            return "HOLD";
+        }
+
+        uint256 cursor = _skipWhitespace(data, marker);
+        if (_matchesAt(data, cursor, "BUY")) {
+            return "BUY";
+        }
+
+        if (_matchesAt(data, cursor, "SELL")) {
+            return "SELL";
+        }
+
+        return "HOLD";
+    }
+
+    function _findMarker(bytes memory data, string memory marker) internal pure returns (uint256 markerIndex) {
+        bytes memory target = bytes(marker);
+        if (target.length == 0 || target.length > data.length) {
+            return type(uint256).max;
+        }
+
+        for (uint256 i = 0; i + target.length <= data.length; i++) {
+            if (_matchesAt(data, i, marker)) {
+                return i + target.length;
+            }
+        }
+
+        return type(uint256).max;
     }
 
     function _assetId(string memory symbol) internal pure returns (bytes32) {
@@ -586,7 +595,7 @@ contract ScheduledMarketWatcher {
     function _escapeJsonString(string memory value) internal pure returns (string memory) {
         bytes memory input = bytes(value);
         bytes memory buffer = new bytes(input.length * 2 + 8);
-        uint256 length;
+        uint256 length = 0;
 
         for (uint256 i = 0; i < input.length; i++) {
             bytes1 char = input[i];

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { AbiCoder, ZeroAddress, keccak256, toUtf8Bytes } from "ethers";
+import { AbiCoder, ZeroAddress, id, keccak256, toUtf8Bytes } from "ethers";
 import { network } from "hardhat";
 
 const coder = AbiCoder.defaultAbiCoder();
@@ -53,7 +53,10 @@ function collectErrorDetails(error) {
     error?.message,
     error?.shortMessage,
     error?.cause?.message,
+    error?.data,
+    error?.error?.data,
     error?.info?.errorName,
+    error?.info?.error?.data,
     error?.revert?.name,
   ].filter((value, index, values) => typeof value === "string" && values.indexOf(value) === index);
 }
@@ -61,9 +64,12 @@ function collectErrorDetails(error) {
 async function assertRevertsWith(action, expectedError) {
   await assert.rejects(action, (error) => {
     const details = collectErrorDetails(error);
+    const expectedSelector = id(`${expectedError}()`).slice(0, 10).toLowerCase();
 
     assert.ok(
-      details.some((value) => value.includes(expectedError)),
+      details.some(
+        (value) => value.includes(expectedError) || value.toLowerCase().includes(expectedSelector)
+      ),
       `Expected error containing "${expectedError}", received: ${details.join(" | ") || String(error)}`
     );
 
@@ -140,7 +146,15 @@ describe("ScheduledMarketWatcher", function () {
       "InvalidScheduleConfig"
     );
     await assertRevertsWith(
+      () => watcher.scheduleAssetWatcher(ethAssetId, 360, 99, 24, 2_200_000, 240, 10n, 1n),
+      "InvalidScheduleConfig"
+    );
+    await assertRevertsWith(
       () => watcher.scheduleAssetWatcher(ethAssetId, 360, 120, 0, 2_200_000, 240, 10n, 1n),
+      "InvalidScheduleConfig"
+    );
+    await assertRevertsWith(
+      () => watcher.scheduleAssetWatcher(ethAssetId, 360, 120, 24, 2_200_000, 179, 10n, 1n),
       "InvalidScheduleConfig"
     );
   });
@@ -217,6 +231,15 @@ describe("ScheduledMarketWatcher", function () {
     assert.equal(snapshot.fetchExecutionIndex, 11n);
     assert.equal(snapshot.available, false);
     assert.equal(snapshot.errorMessage, "JQ extraction returned empty summary");
+  });
+
+  it("reverts fetches when the HTTP precompile call itself fails", async function () {
+    const { watcher, http } = await deployFixture();
+    const ethAssetId = await configureEthWatcher(watcher);
+
+    await http.setRevert("http unavailable");
+
+    await assertRevertsWith(() => watcher.fetchNow(ethAssetId), "PrecompileCallFailed");
   });
 
   it("stores a normalized market snapshot after a mocked scheduler fetch", async function () {
@@ -327,6 +350,56 @@ describe("ScheduledMarketWatcher", function () {
     assert.equal(sentiment.snapshotTimestamp, snapshot.fetchedAt);
   });
 
+  it("reverts analysis when the LLM precompile call itself fails", async function () {
+    const { watcher, http, jq, llm } = await deployFixture();
+    const ethAssetId = await configureEthWatcher(watcher);
+
+    const rawBody = JSON.stringify({
+      market_data: {
+        current_price: { usd: 3500.12 },
+        price_change_percentage_24h: 4.8,
+        total_volume: { usd: 18000000000 },
+        market_cap: { usd: 420000000000 },
+      },
+    });
+    const summary = "price_usd=3500.12 price_change_24h=4.8 volume_usd=18000000000 market_cap_usd=420000000000";
+
+    await http.setResponse(shortRunningEnvelope(httpSettlement(200, rawBody)));
+    await jq.setResponse(jqStringResult(summary));
+    await watcher.fetchNow(ethAssetId);
+
+    await llm.setRevert("llm unavailable");
+
+    await assertRevertsWith(() => watcher.analyzeNow(ethAssetId), "PrecompileCallFailed");
+  });
+
+  it("reverts analysis when the LLM returns an empty completion", async function () {
+    const { watcher, http, jq, llm } = await deployFixture();
+    const ethAssetId = await configureEthWatcher(watcher);
+
+    const rawBody = JSON.stringify({
+      market_data: {
+        current_price: { usd: 3500.12 },
+        price_change_percentage_24h: 4.8,
+        total_volume: { usd: 18000000000 },
+        market_cap: { usd: 420000000000 },
+      },
+    });
+    const summary = "price_usd=3500.12 price_change_24h=4.8 volume_usd=18000000000 market_cap_usd=420000000000";
+    const llmSettlement = coder.encode(
+      ["bool", "bytes", "bytes", "string", "tuple(string platform,string path,string keyRef)"],
+      [false, llmCompletion(""), "0x", "", ["", "", ""]]
+    );
+
+    await http.setResponse(shortRunningEnvelope(httpSettlement(200, rawBody)));
+    await jq.setResponse(jqStringResult(summary));
+    await watcher.fetchNow(ethAssetId);
+
+    await llm.setResponse(shortRunningEnvelope(llmSettlement));
+
+    await assertRevertsWith(() => watcher.analyzeNow(ethAssetId), "EmptyCompletion");
+  });
+
   it("requires an available market snapshot before analysis", async function () {
     const { watcher } = await deployFixture();
     const ethAssetId = await configureEthWatcher(watcher);
@@ -335,11 +408,24 @@ describe("ScheduledMarketWatcher", function () {
   });
 
   it("transfers ownership safely and rejects zero-address handoff", async function () {
-    const { watcher, other } = await deployFixture();
+    const { watcher, owner, other } = await deployFixture();
 
     await assertRevertsWith(() => watcher.transferOwnership(ZeroAddress), "InvalidOwner");
 
-    await watcher.transferOwnership(other.address);
+    const transferTx = await watcher.transferOwnership(other.address);
+    const transferReceipt = await transferTx.wait();
+    const ownershipEvent = transferReceipt.logs
+      .flatMap((log) => {
+        try {
+          return [watcher.interface.parseLog(log)];
+        } catch {
+          return [];
+        }
+      })
+      .find((log) => log?.name === "OwnershipTransferred");
+
+    assert.equal(ownershipEvent?.args.previousOwner, owner.address);
+    assert.equal(ownershipEvent?.args.newOwner, other.address);
     assert.equal(await watcher.owner(), other.address);
 
     await assertRevertsWith(

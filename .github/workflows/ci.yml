@@ -1,6 +1,5 @@
 name: Validate
-
-on:
+"on":
   push:
     branches:
       - main
