@@ -1,0 +1,17 @@
+{
+  "name": "ritual-onchain-oracle",
+  "version": "0.1.0",
+  "description": "On-chain sentiment oracle powered by Ritual LLM Precompile (0x0802)",
+  "scripts": {
+    "compile":  "hardhat compile",
+    "deploy":   "hardhat run scripts/deploy.js --network ritual-testnet",
+    "test":     "hardhat test"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "hardhat": "^2.22.0"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5"
+  }
+}

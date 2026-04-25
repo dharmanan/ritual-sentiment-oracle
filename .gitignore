@@ -1,0 +1,8 @@
+node_modules/
+artifacts/
+cache/
+.env
+.claude/skills/ritual-dapp-skills/
+__pycache__/
+*.pyc
+.DS_Store
