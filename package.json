@@ -16,17 +16,17 @@
     "validate": "npm run compile && npm run test:unit -- --no-compile && npm run check:helper"
   },
   "devDependencies": {
-    "@nomicfoundation/hardhat-ethers": "^4.0.9",
-    "@nomicfoundation/hardhat-network-helpers": "^3.0.6",
-    "@nomicfoundation/hardhat-node-test-runner": "^3.0.14",
+    "@nomicfoundation/hardhat-ethers": "^4.0.11",
+    "@nomicfoundation/hardhat-network-helpers": "^3.0.8",
+    "@nomicfoundation/hardhat-node-test-runner": "^3.0.15",
     "ethers": "^6.16.0",
-    "hardhat": "^3.4.1"
+    "hardhat": "^3.4.5"
   },
   "overrides": {
     "@actions/core": "^3.0.1",
     "@actions/http-client": "^4.0.1"
   },
   "dependencies": {
-    "dotenv": "^16.4.5"
+    "dotenv": "^17.4.2"
   }
 }
